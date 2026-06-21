@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="id" class="dark scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>TransferFlow Pro — Monitor Transfer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+                        'slide-up': 'slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                        'fade-in': 'fadeIn 0.3s ease-out',
+                        'bounce-gentle': 'bounceGentle 0.6s ease-in-out',
+                    },
+                    keyframes: {
+                        float: { '0%, 100%': { transform: 'translateY(0px)' }, '50%': { transform: 'translateY(-10px)' } },
+                        pulseSoft: { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.7' } },
+                        slideUp: { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        bounceGentle: { '0%, 100%': { transform: 'scale(1)' }, '50%': { transform: 'scale(1.05)' } },
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .modal-blur { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+        .hover-lift { transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .hover-lift:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -12px rgba(0,0,0,0.15); }
+        .card-shimmer { position: relative; overflow: hidden; }
+        .card-shimmer::after { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); transition: left 0.6s; }
+        .card-shimmer:hover::after { left: 100%; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 20px; }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(40px) scale(0.9); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-20px) scale(0.9); } }
+        .toast-enter { animation: toastIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .toast-exit { animation: toastOut 0.3s ease-in forwards; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 min-h-screen text-slate-200 transition-colors duration-500">
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Setup PIN Modal -->
+    <div id="setupPinModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-blur bg-black/50 transition-all">
+        <div class="bg-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-sm text-center animate-slide-up border border-slate-700">
+            <div class="w-14 h-14 md:w-16 md:h-16 bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-4"><i data-lucide="key" class="w-7 h-7 md:w-8 md:h-8 text-indigo-400"></i></div>
+            <h3 class="text-lg md:text-xl font-bold mb-2 text-white">Buat PIN Admin</h3>
+            <p class="text-slate-400 mb-5 text-xs md:text-sm">PIN ini akan digunakan untuk mengakses panel admin. Harap diingat.</p>
+            <div class="space-y-3 mb-5">
+                <input id="newPin1" type="password" maxlength="4" placeholder="PIN (4 digit)" class="w-full text-center text-xl font-bold tracking-[0.4em] py-3 bg-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-400 text-white placeholder:text-slate-500">
+                <input id="newPin2" type="password" maxlength="4" placeholder="Konfirmasi PIN" class="w-full text-center text-xl font-bold tracking-[0.4em] py-3 bg-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-400 text-white placeholder:text-slate-500">
+            </div>
+            <button onclick="setupPin()" class="w-full py-3.5 rounded-2xl font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-500/25 text-sm transition-all">Simpan PIN</button>
+        </div>
+    </div>
+
+    <!-- Login PIN Modal -->
+    <div id="loginPinModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-blur bg-black/50 transition-all">
+        <div class="bg-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-sm text-center animate-slide-up border border-slate-700">
+            <div class="w-14 h-14 md:w-16 md:h-16 bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-4"><i data-lucide="shield-check" class="w-7 h-7 md:w-8 md:h-8 text-indigo-400"></i></div>
+            <h3 class="text-lg md:text-xl font-bold mb-2 text-white">Login Admin</h3>
+            <p class="text-slate-400 mb-5 text-xs md:text-sm">Masukkan PIN untuk masuk ke panel admin.</p>
+            <div class="relative mb-5">
+                <input id="loginPinInput" type="password" maxlength="4" placeholder="••••" class="w-full text-center text-2xl md:text-3xl font-black tracking-[0.6em] py-3 md:py-4 bg-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-400 text-white transition-all placeholder:text-slate-500">
+                <i data-lucide="lock" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 md:w-5 md:h-5 text-slate-500 pointer-events-none"></i>
+            </div>
+            <button onclick="loginAdmin()" class="w-full py-3 md:py-3.5 rounded-2xl font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-500/25 text-sm transition-all">Masuk</button>
+            <button onclick="closeLoginModal()" class="mt-3 w-full py-2.5 rounded-2xl font-semibold text-slate-400 hover:text-slate-200 text-sm transition-all">Batal</button>
+        </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div id="deleteModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-blur bg-black/50 transition-all">
+        <div class="bg-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-sm text-center animate-slide-up border border-slate-700">
+            <div class="w-14 h-14 md:w-16 md:h-16 bg-red-900/50 rounded-2xl flex items-center justify-center mx-auto mb-4"><i data-lucide="alert-triangle" class="w-7 h-7 md:w-8 md:h-8 text-red-400"></i></div>
+            <h3 class="text-lg md:text-xl font-bold mb-2 text-white">Konfirmasi Hapus</h3>
+            <p class="text-slate-400 mb-5 text-xs md:text-sm">Data ini akan dihapus permanen. Lanjutkan?</p>
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="closeDeleteModal()" class="py-3 md:py-3.5 rounded-2xl font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-all">Batal</button>
+                <button id="confirmDeleteBtn" class="py-3 md:py-3.5 rounded-2xl font-semibold bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/25 text-sm transition-all">Hapus</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-blur bg-black/50 transition-all">
+        <div class="bg-slate-800 rounded-3xl p-5 md:p-8 shadow-2xl w-full max-w-lg animate-slide-up border border-slate-700 max-h-[85vh] overflow-y-auto">
+            <h3 class="text-lg md:text-xl font-bold mb-4 text-white flex items-center gap-2"><i data-lucide="edit" class="w-5 h-5 md:w-6 md:h-6 text-indigo-400"></i> Edit Data Transfer</h3>
+            <div class="space-y-3">
+                <input id="editId" type="hidden">
+                <div>
+                    <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Nama</label>
+                    <input id="editNama" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm">
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Platform</label>
+                    <input id="editPlat" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Tanggal</label>
+                        <input id="editTanggal" type="date" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Status</label>
+                        <select id="editStatus" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm">
+                            <option value="false">Pending</option>
+                            <option value="true">Selesai</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Catatan</label>
+                    <textarea id="editCatatan" rows="2" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm resize-none"></textarea>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1">Link Bukti Transfer (Google Drive)</label>
+                    <input id="editBukti" type="url" placeholder="https://drive.google.com/..." class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm">
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button onclick="closeEditModal()" class="flex-1 py-3 rounded-2xl font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-all">Batal</button>
+                    <button onclick="saveEdit()" class="flex-1 py-3 rounded-2xl font-semibold bg-indigo-600 hover:bg-indigo-700 text-white text-sm transition-all">Simpan Perubahan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="exportModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-blur bg-black/50 transition-all">
+        <div class="bg-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl w-full max-w-md animate-slide-up border border-slate-700">
+            <h3 class="text-lg md:text-xl font-bold mb-4 text-white flex items-center gap-2"><i data-lucide="download" class="w-5 h-5 md:w-6 md:h-6 text-indigo-400"></i> Ekspor Data</h3>
+            <div class="space-y-3 mb-6">
+                <button onclick="exportData('json')" class="w-full py-3 md:py-3.5 rounded-2xl font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-all flex items-center justify-center gap-2"><i data-lucide="file-json" class="w-4 h-4 md:w-5 md:h-5"></i> Ekspor JSON</button>
+                <button onclick="exportData('csv')" class="w-full py-3 md:py-3.5 rounded-2xl font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-all flex items-center justify-center gap-2"><i data-lucide="file-spreadsheet" class="w-4 h-4 md:w-5 md:h-5"></i> Ekspor CSV</button>
+            </div>
+            <button onclick="closeExportModal()" class="w-full py-2.5 md:py-3 rounded-2xl font-semibold text-slate-400 hover:text-slate-200 text-sm transition-all">Tutup</button>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div id="importModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-blur bg-black/50 transition-all">
+        <div class="bg-slate-800 rounded-3xl p-5 md:p-8 shadow-2xl w-full max-w-lg animate-slide-up border border-slate-700 max-h-[85vh] overflow-y-auto">
+            <h3 class="text-lg md:text-xl font-bold mb-4 text-white flex items-center gap-2"><i data-lucide="upload" class="w-5 h-5 md:w-6 md:h-6 text-indigo-400"></i> Impor Massal</h3>
+            <p class="text-slate-400 text-xs md:text-sm mb-4">Unggah file CSV/JSON atau tempel array JSON untuk menambahkan banyak data sekaligus.</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Unggah File</label>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="file" id="importFile" accept=".json,.csv" class="w-full text-xs md:text-sm text-slate-300 file:mr-4 file:py-2 file:px-3 md:file:px-4 file:rounded-xl file:border-0 file:bg-indigo-600 file:text-white file:font-semibold hover:file:bg-indigo-700 file:transition-all bg-slate-700 rounded-xl p-2"/>
+                        <button onclick="processImportFile()" class="px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all flex items-center justify-center gap-1.5 text-sm whitespace-nowrap"><i data-lucide="upload" class="w-4 h-4"></i> Proses</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Atau Tempel JSON</label>
+                    <textarea id="importJsonText" placeholder='[{"nama":"Budi","platform":"Shopee","tanggal":"2026-06-21","catatan":"","status":false,"bukti":""}]' rows="5" class="w-full bg-slate-700 border-none p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-xs md:text-sm transition-all resize-none"></textarea>
+                    <button onclick="processImportText()" class="mt-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-all flex items-center gap-1.5 text-sm"><i data-lucide="plus-circle" class="w-4 h-4"></i> Tambahkan Data</button>
+                </div>
+                <div class="bg-slate-700/50 rounded-xl p-3 text-xs text-slate-400">
+                    <p class="font-semibold mb-1">Format CSV yang didukung:</p>
+                    <code>nama,platform,tanggal,catatan,status,bukti</code><br>
+                    <span class="text-slate-500">Contoh: Budi,Shopee,2026-06-21,Transfer,true,https://drive.google.com/...</span>
+                </div>
+            </div>
+            <button onclick="closeImportModal()" class="mt-5 w-full py-2.5 md:py-3 rounded-2xl font-semibold text-slate-400 hover:text-slate-200 text-sm transition-all">Tutup</button>
+        </div>
+    </div>
+
+    <!-- Root Container -->
+    <div id="root" class="max-w-4xl mx-auto p-3 md:p-6 lg:p-8"></div>
+
+    <script>
+        // ──────────────────────────────────────
+        // DATA & STORAGE KEYS
+        // ──────────────────────────────────────
+        const STORAGE_KEY = 'transferflow_pro_data';
+        const PIN_HASH_KEY = 'admin_pin_hash';
+        const AUTH_KEY = 'transferflow_admin_auth';
+
+        function loadData() {
+            try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return JSON.parse(raw); } catch (e) {}
+            const today = new Date().toISOString().split('T')[0];
+            return [
+                { id: 1, nama: "Ruly", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 2, nama: "Hani", platform: "Gopay", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 3, nama: "Arif", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 4, nama: "Raihan", platform: "OVO", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 5, nama: "Akhdaan", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 6, nama: "Rendy", platform: "Gopay", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 7, nama: "Regita", platform: "BNI", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 8, nama: "Dinda", platform: "Gopay", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 9, nama: "Risya", platform: "Gopay", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 10, nama: "Rifqi", platform: "Seabank", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 11, nama: "Hilda", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 12, nama: "Niswa", platform: "Gopay", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 13, nama: "Alvin", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 14, nama: "Diaz", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 15, nama: "Arik", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 16, nama: "Farras", platform: "Shopeepay", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 17, nama: "Rasya", platform: "BNI", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 18, nama: "Salim", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 19, nama: "Muni", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 20, nama: "Gusti", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 21, nama: "Syaina", platform: "BRI", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 22, nama: "Naufal Robik Akdila", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 23, nama: "Fitri Anggraini", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 24, nama: "Qeela", platform: "BNI", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 25, nama: "Mala", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 26, nama: "Yosua", platform: "Seabank", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 27, nama: "Vahra", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 28, nama: "Agit Apta Meilano", platform: "BCA", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 29, nama: "Femas", platform: "Gopay", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 30, nama: "Hanafi", platform: "Dana", tanggal: today, catatan: "", status: false, bukti: "" },
+                { id: 31, nama: "Andre", platform: "BNI", tanggal: today, catatan: "", status: false, bukti: "" }
+            ];
+        }
+
+        function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(transfers)); }
+
+        // ──────────────────────────────────────
+        // CRYPTO HELPERS (SHA-256 via Web Crypto)
+        // ──────────────────────────────────────
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function getStoredPinHash() { return localStorage.getItem(PIN_HASH_KEY); }
+        function isPinSetup() { return !!getStoredPinHash(); }
+
+        // ──────────────────────────────────────
+        // STATE
+        // ──────────────────────────────────────
+        let transfers = loadData();
+        let isAdmin = false;
+        let deleteTargetId = null;
+        let editTargetId = null;
+        let searchQuery = '';
+        let filterStatus = 'semua';
+        let sortBy = 'terbaru';
+        let activeAdminTab = 'daftar';
+        let pendingFocus = null;
+
+        document.documentElement.classList.add('dark');
+
+        // ──────────────────────────────────────
+        // TOAST
+        // ──────────────────────────────────────
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const icons = { success: 'check-circle', error: 'x-circle', info: 'info', warning: 'alert-triangle' };
+            const colors = { success: 'bg-emerald-500 text-white', error: 'bg-red-500 text-white', info: 'bg-indigo-500 text-white', warning: 'bg-amber-500 text-white' };
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto ${colors[type]} px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2 font-semibold text-xs md:text-sm toast-enter max-w-xs`;
+            toast.innerHTML = `<i data-lucide="${icons[type]}" class="w-4 h-4 flex-shrink-0"></i> ${message}`;
+            container.appendChild(toast);
+            lucide.createIcons({ nodes: [toast] });
+            setTimeout(() => { toast.classList.add('toast-exit'); toast.addEventListener('animationend', () => toast.remove()); }, 2500);
+        }
+
+        // ──────────────────────────────────────
+        // ROUTING & AUTH LOGIC
+        // ──────────────────────────────────────
+        function checkAccess() {
+            const hash = window.location.hash;
+            if (hash === '#admin') {
+                if (isAdmin) render();
+                else if (isPinSetup()) {
+                    document.getElementById('loginPinModal').classList.remove('hidden');
+                    document.getElementById('loginPinInput').focus();
+                    render();
+                } else {
+                    document.getElementById('setupPinModal').classList.remove('hidden');
+                    document.getElementById('newPin1').focus();
+                    render();
+                }
+            } else {
+                isAdmin = false;
+                closeAllModals();
+                render();
+            }
+        }
+
+        window.addEventListener('hashchange', checkAccess);
+
+        function closeAllModals() {
+            ['setupPinModal', 'loginPinModal', 'deleteModal', 'editModal', 'exportModal', 'importModal'].forEach(id => document.getElementById(id).classList.add('hidden'));
+        }
+
+        // ──────────────────────────────────────
+        // PIN SETUP & LOGIN
+        // ──────────────────────────────────────
+        window.setupPin = async () => {
+            const pin1 = document.getElementById('newPin1').value.trim();
+            const pin2 = document.getElementById('newPin2').value.trim();
+            if (pin1.length !== 4 || pin2.length !== 4) return showToast('PIN harus 4 digit.', 'warning');
+            if (pin1 !== pin2) return showToast('PIN tidak cocok.', 'error');
+            const hash = await sha256(pin1);
+            localStorage.setItem(PIN_HASH_KEY, hash);
+            document.getElementById('setupPinModal').classList.add('hidden');
+            document.getElementById('newPin1').value = '';
+            document.getElementById('newPin2').value = '';
+            showToast('PIN admin berhasil disimpan! Silakan login.', 'success');
+            document.getElementById('loginPinModal').classList.remove('hidden');
+            document.getElementById('loginPinInput').focus();
+        };
+
+        window.loginAdmin = async () => {
+            const inputPin = document.getElementById('loginPinInput').value.trim();
+            if (inputPin.length !== 4) return showToast('Masukkan 4 digit PIN.', 'warning');
+            const inputHash = await sha256(inputPin);
+            if (inputHash === getStoredPinHash()) {
+                isAdmin = true;
+                localStorage.setItem(AUTH_KEY, 'true');
+                document.getElementById('loginPinModal').classList.add('hidden');
+                document.getElementById('loginPinInput').value = '';
+                showToast('Login berhasil!', 'success');
+                render();
+            } else {
+                showToast('PIN salah.', 'error');
+                document.getElementById('loginPinInput').value = '';
+                document.getElementById('loginPinInput').classList.add('border-2', 'border-red-500');
+                setTimeout(() => document.getElementById('loginPinInput').classList.remove('border-2', 'border-red-500'), 600);
+            }
+        };
+
+        window.closeLoginModal = () => {
+            document.getElementById('loginPinModal').classList.add('hidden');
+            document.getElementById('loginPinInput').value = '';
+            window.location.hash = '';
+        };
+
+        window.logoutAdmin = () => {
+            isAdmin = false;
+            localStorage.removeItem(AUTH_KEY);
+            window.location.hash = '';
+        };
+
+        // ──────────────────────────────────────
+        // RENDER (dengan pemulihan fokus)
+        // ──────────────────────────────────────
+        function render() {
+            const root = document.getElementById('root');
+            const filtered = getFilteredTransfers();
+            const stats = getStats();
+
+            if (isAdmin) root.innerHTML = renderAdminDashboard(stats, filtered);
+            else root.innerHTML = renderPublicView(filtered, stats);
+
+            lucide.createIcons();
+            saveData();
+
+            if (pendingFocus) {
+                const el = document.getElementById(pendingFocus);
+                if (el) {
+                    el.focus();
+                    const len = el.value.length;
+                    el.setSelectionRange(len, len);
+                }
+                pendingFocus = null;
+            }
+        }
+
+        function renderPublicView(filtered, stats) {
+            if (transfers.length === 0) {
+                return `<div class="text-center py-16"><div class="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-5"><i data-lucide="inbox" class="w-8 h-8 text-slate-600"></i></div><h3 class="text-lg font-bold text-slate-500 mb-2">Belum Ada Data</h3></div>`;
+            }
+            return `
+            <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 md:mb-8">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 md:w-12 md:h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/25"><i data-lucide="arrow-left-right" class="w-5 h-5 md:w-6 md:h-6 text-white"></i></div>
+                    <div><h1 class="text-xl md:text-3xl font-black text-white tracking-tight leading-none">TransferFlow</h1><p class="text-slate-400 text-[9px] md:text-[10px] font-semibold uppercase tracking-[0.2em]">Status Transfer Uang Kas</p></div>
+                </div>
+                <div class="relative w-full sm:w-64">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                    <input id="publicSearch" type="text" placeholder="Cari nama..." value="${escapeHtml(searchQuery)}"
+                        oninput="handlePublicSearchDebounced(this)" class="w-full pl-9 pr-4 py-2.5 bg-slate-800 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-400 text-white placeholder:text-slate-500 border border-slate-700">
+                </div>
+            </header>
+            <div class="grid grid-cols-3 gap-3 md:gap-4 mb-5">
+                <div class="bg-slate-800 rounded-2xl p-3 md:p-5 shadow-sm border border-slate-700 text-center"><p class="text-slate-400 text-[10px] uppercase mb-0.5">Total</p><p class="text-xl md:text-3xl font-black text-white">${stats.total}</p></div>
+                <div class="bg-slate-800 rounded-2xl p-3 md:p-5 shadow-sm border border-slate-700 text-center"><p class="text-slate-400 text-[10px] uppercase mb-0.5">Selesai</p><p class="text-xl md:text-3xl font-black text-emerald-400">${stats.selesai}</p></div>
+                <div class="bg-slate-800 rounded-2xl p-3 md:p-5 shadow-sm border border-slate-700 text-center"><p class="text-slate-400 text-[10px] uppercase mb-0.5">Pending</p><p class="text-xl md:text-3xl font-black text-amber-400">${stats.pending}</p></div>
+            </div>
+            <div class="space-y-2 md:space-y-3">
+                ${filtered.map((t, i) => `
+                <div class="bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 hover-lift card-shimmer animate-fade-in" style="animation-delay: ${i*50}ms">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center font-black text-xs md:text-sm ${t.status ? 'bg-emerald-900/40 text-emerald-400' : 'bg-amber-900/40 text-amber-400'}">${t.nama.charAt(0).toUpperCase()}</div>
+                        <div>
+                            <h3 class="font-bold text-white text-sm md:text-base">${escapeHtml(t.nama)}</h3>
+                            <p class="text-slate-400 text-xs">${escapeHtml(t.platform)} • ${t.tanggal}</p>
+                            ${t.bukti ? `<a href="${escapeHtml(t.bukti)}" target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-400 hover:text-indigo-300 mt-1 inline-flex items-center gap-1"><i data-lucide="external-link" class="w-3 h-3"></i> Bukti Transfer</a>` : ''}
+                        </div>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-bold uppercase self-end sm:self-auto ${t.status ? 'bg-emerald-900/30 text-emerald-400' : 'bg-amber-900/30 text-amber-400'}">${t.status ? 'Selesai' : 'Pending'}</span>
+                </div>`).join('')}
+            </div>`;
+        }
+
+        function renderAdminDashboard(stats, filtered) {
+            const tabs = [
+                { key: 'daftar', label: 'Daftar', icon: 'list' },
+                { key: 'tambah', label: 'Tambah', icon: 'plus-circle' },
+                { key: 'impor', label: 'Impor', icon: 'upload' },
+                { key: 'statistik', label: 'Statistik', icon: 'bar-chart-3' },
+            ];
+            let tabContent = '';
+            if (activeAdminTab === 'daftar') tabContent = renderAdminList(filtered);
+            else if (activeAdminTab === 'tambah') tabContent = renderAdminForm();
+            else if (activeAdminTab === 'impor') tabContent = renderImportTab();
+            else if (activeAdminTab === 'statistik') tabContent = renderAdminStats(stats);
+
+            return `
+            <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 md:w-12 md:h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/25"><i data-lucide="shield-check" class="w-5 h-5 md:w-6 md:h-6 text-white"></i></div>
+                    <div><h1 class="text-xl md:text-3xl font-black text-white">Admin Panel</h1><p class="text-slate-400 text-[9px] uppercase tracking-[0.2em]">TransferFlow Pro</p></div>
+                </div>
+                <button onclick="logoutAdmin()" class="px-4 py-2 rounded-xl bg-red-900/30 text-red-400 border border-red-800 text-xs font-bold hover:bg-red-900/50 flex items-center gap-1.5"><i data-lucide="log-out" class="w-3.5 h-3.5"></i> Keluar</button>
+            </header>
+            <div class="bg-slate-800 rounded-2xl md:rounded-3xl shadow-xl border border-slate-700 overflow-hidden">
+                <div class="flex border-b border-slate-700 bg-slate-900/50 overflow-x-auto">
+                    ${tabs.map(tab => `<button onclick="switchTab('${tab.key}')" class="flex-1 py-2.5 md:py-4 font-semibold text-[11px] md:text-sm flex items-center justify-center gap-1 md:gap-2 whitespace-nowrap px-2 ${activeAdminTab===tab.key ? 'text-indigo-400 border-b-2 border-indigo-400 bg-slate-800' : 'text-slate-400 hover:text-slate-300'}"><i data-lucide="${tab.icon}" class="w-3.5 h-3.5 md:w-4 md:h-4"></i> ${tab.label}</button>`).join('')}
+                </div>
+                <div class="p-3 md:p-5 lg:p-6">${tabContent}</div>
+            </div>`;
+        }
+
+        function renderAdminList(filtered) {
+            if (filtered.length === 0 && transfers.length === 0) return `<div class="text-center py-10"><p class="text-slate-500">Belum ada data.</p></div>`;
+            return `
+            <div class="flex flex-col sm:flex-row gap-2 md:gap-3 mb-4">
+                <div class="relative flex-1">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400"></i>
+                    <input id="adminSearch" type="text" placeholder="Cari nama..." value="${escapeHtml(searchQuery)}"
+                        oninput="handleAdminSearchDebounced(this)" class="w-full pl-8 pr-3 py-2.5 bg-slate-700 rounded-xl text-xs md:text-sm outline-none focus:ring-2 focus:ring-indigo-400 text-white placeholder:text-slate-500">
+                </div>
+                <select onchange="handleFilter(this.value)" class="py-2.5 px-3 bg-slate-700 rounded-xl text-xs md:text-sm outline-none focus:ring-2 focus:ring-indigo-400 text-white"><option value="semua" ${filterStatus==='semua'?'selected':''}>Semua</option><option value="selesai" ${filterStatus==='selesai'?'selected':''}>Selesai</option><option value="pending" ${filterStatus==='pending'?'selected':''}>Pending</option></select>
+                <select onchange="handleSort(this.value)" class="py-2.5 px-3 bg-slate-700 rounded-xl text-xs md:text-sm outline-none focus:ring-2 focus:ring-indigo-400 text-white"><option value="terbaru" ${sortBy==='terbaru'?'selected':''}>Terbaru</option><option value="terlama" ${sortBy==='terlama'?'selected':''}>Terlama</option><option value="nama-az" ${sortBy==='nama-az'?'selected':''}>A-Z</option></select>
+            </div>
+            <div class="space-y-2 max-h-[450px] overflow-y-auto pr-1">
+                ${filtered.map((t,i) => `
+                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 p-3 md:p-4 bg-slate-700/50 rounded-2xl animate-fade-in">
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                        <div class="w-8 h-8 md:w-10 md:h-10 rounded-xl flex items-center justify-center font-black text-xs md:text-sm ${t.status ? 'bg-emerald-900/40 text-emerald-400' : 'bg-amber-900/40 text-amber-400'}">${t.nama.charAt(0).toUpperCase()}</div>
+                        <div class="min-w-0 flex-1">
+                            <p class="font-bold text-white text-sm md:text-base truncate">${escapeHtml(t.nama)}</p>
+                            <p class="text-xs text-slate-400">${escapeHtml(t.platform)} • ${t.tanggal}</p>
+                            ${t.catatan ? `<p class="text-xs text-slate-500 italic truncate">"${escapeHtml(t.catatan)}"</p>` : ''}
+                            ${t.bukti ? `<a href="${escapeHtml(t.bukti)}" target="_blank" class="text-xs text-indigo-400 hover:text-indigo-300 mt-0.5 inline-flex items-center gap-1"><i data-lucide="external-link" class="w-3 h-3"></i> Bukti</a>` : ''}
+                        </div>
+                    </div>
+                    <div class="flex gap-1.5 self-end sm:self-auto">
+                        <button onclick="openEditModal(${t.id})" class="p-2 bg-slate-600 rounded-xl text-amber-400 hover:bg-slate-500" title="Edit"><i data-lucide="pencil" class="w-3.5 h-3.5 md:w-4 md:h-4"></i></button>
+                        <button onclick="toggleStatus(${t.id})" class="p-2 bg-slate-600 rounded-xl text-indigo-300 hover:bg-slate-500" title="Toggle status"><i data-lucide="${t.status ? 'rotate-ccw' : 'check-circle'}" class="w-3.5 h-3.5 md:w-4 md:h-4"></i></button>
+                        <button onclick="openDeleteModal(${t.id})" class="p-2 bg-slate-600 rounded-xl text-red-400 hover:bg-slate-500" title="Hapus"><i data-lucide="trash-2" class="w-3.5 h-3.5 md:w-4 md:h-4"></i></button>
+                    </div>
+                </div>`).join('')}
+            </div>
+            <div class="mt-4 flex justify-between items-center"><span class="text-xs text-slate-500">${filtered.length} dari ${transfers.length}</span><div class="flex gap-2"><button onclick="openExportModal()" class="px-3 py-1.5 bg-indigo-900/30 text-indigo-400 rounded-xl text-xs font-bold hover:bg-indigo-900/50">Ekspor</button><button onclick="backupData()" class="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-600">Backup</button></div></div>`;
+        }
+
+        function renderAdminForm() {
+            return `<div class="max-w-lg mx-auto"><h4 class="font-bold text-base md:text-lg text-white mb-4 flex items-center gap-2"><i data-lucide="plus-circle" class="w-4 h-4 md:w-5 md:h-5 text-indigo-400"></i> Tambah Data</h4>
+            <div class="space-y-3">
+                <input id="inNama" placeholder="Nama Penerima" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm">
+                <input id="inPlat" placeholder="Platform" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm">
+                <div class="grid grid-cols-2 gap-3">
+                    <input id="inTanggal" type="date" value="${new Date().toISOString().split('T')[0]}" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm">
+                    <select id="inStatus" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm"><option value="false">Pending</option><option value="true">Selesai</option></select>
+                </div>
+                <textarea id="inCatatan" placeholder="Catatan (opsional)" rows="2" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm resize-none"></textarea>
+                <input id="inBukti" type="url" placeholder="Link Bukti (Google Drive)" class="w-full bg-slate-700 p-3 md:p-4 rounded-xl focus:ring-2 focus:ring-indigo-400 outline-none text-white text-sm">
+                <button onclick="addData()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Tambahkan</button>
+            </div></div>`;
+        }
+
+        function renderImportTab() { return `<div class="text-center py-4"><button onclick="openImportModal()" class="px-5 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 flex items-center gap-2 mx-auto"><i data-lucide="upload" class="w-4 h-4"></i> Buka Panel Impor Massal</button></div>`; }
+        function renderAdminStats(stats) {
+            const platformCounts = {};
+            transfers.forEach(t => { platformCounts[t.platform] = (platformCounts[t.platform] || 0) + 1; });
+            const topPlatforms = Object.entries(platformCounts).sort((a,b) => b[1]-a[1]).slice(0,5);
+            return `
+            <div class="grid grid-cols-3 gap-3 md:gap-4 mb-5">
+                <div class="bg-slate-700/50 rounded-2xl p-4 text-center"><p class="text-2xl font-black text-white">${stats.total}</p><p class="text-xs text-slate-400 uppercase">Total</p></div>
+                <div class="bg-slate-700/50 rounded-2xl p-4 text-center"><p class="text-2xl font-black text-emerald-400">${stats.selesai}</p><p class="text-xs text-slate-400 uppercase">Selesai</p></div>
+                <div class="bg-slate-700/50 rounded-2xl p-4 text-center"><p class="text-2xl font-black text-amber-400">${stats.pending}</p><p class="text-xs text-slate-400 uppercase">Pending</p></div>
+            </div>
+            <div class="bg-slate-700/50 rounded-2xl p-4"><h5 class="font-bold text-sm text-slate-200 mb-2">Platform Teratas</h5>${topPlatforms.map(([p,c]) => `<div class="flex justify-between py-1.5 text-sm"><span class="text-slate-300">${escapeHtml(p)}</span><span class="font-bold text-white">${c}</span></div>`).join('')}</div>`;
+        }
+
+        // ──────────────────────────────────────
+        // EDIT MODAL
+        // ──────────────────────────────────────
+        window.openEditModal = (id) => {
+            const data = transfers.find(t => t.id === id);
+            if (!data) return;
+            editTargetId = id;
+            document.getElementById('editId').value = data.id;
+            document.getElementById('editNama').value = data.nama;
+            document.getElementById('editPlat').value = data.platform;
+            document.getElementById('editTanggal').value = data.tanggal;
+            document.getElementById('editCatatan').value = data.catatan || '';
+            document.getElementById('editStatus').value = data.status ? 'true' : 'false';
+            document.getElementById('editBukti').value = data.bukti || '';
+            document.getElementById('editModal').classList.remove('hidden');
+        };
+
+        window.closeEditModal = () => {
+            editTargetId = null;
+            document.getElementById('editModal').classList.add('hidden');
+        };
+
+        window.saveEdit = () => {
+            if (editTargetId === null) return;
+            const id = parseInt(document.getElementById('editId').value);
+            const nama = document.getElementById('editNama').value.trim();
+            const plat = document.getElementById('editPlat').value.trim();
+            const tanggal = document.getElementById('editTanggal').value;
+            const catatan = document.getElementById('editCatatan').value.trim();
+            const status = document.getElementById('editStatus').value === 'true';
+            const bukti = document.getElementById('editBukti').value.trim();
+
+            if (!nama || !plat) return showToast('Nama dan platform wajib diisi.', 'warning');
+
+            transfers = transfers.map(t => {
+                if (t.id === id) {
+                    return { ...t, nama, platform: plat, tanggal, catatan, status, bukti };
+                }
+                return t;
+            });
+            closeEditModal();
+            render();
+            showToast(`Data "${nama}" berhasil diperbarui.`, 'success');
+        };
+
+        // ──────────────────────────────────────
+        // DEBOUNCE DENGAN PELESTARIAN FOKUS
+        // ──────────────────────────────────────
+        function debounceWithFocus(func, delay) {
+            let timer;
+            return function(inputElement) {
+                clearTimeout(timer);
+                const id = inputElement.id;
+                pendingFocus = id;
+                timer = setTimeout(() => {
+                    func(inputElement.value);
+                }, delay);
+            };
+        }
+
+        window.handlePublicSearchDebounced = debounceWithFocus((value) => {
+            searchQuery = value;
+            render();
+        }, 300);
+
+        window.handleAdminSearchDebounced = debounceWithFocus((value) => {
+            searchQuery = value;
+            render();
+        }, 300);
+
+        // ──────────────────────────────────────
+        // HELPERS
+        // ──────────────────────────────────────
+        function escapeHtml(str) { if(!str) return ''; const d=document.createElement('div'); d.textContent=str; return d.innerHTML; }
+        function getFilteredTransfers() {
+            let result = [...transfers];
+            if(filterStatus==='selesai') result=result.filter(t=>t.status);
+            if(filterStatus==='pending') result=result.filter(t=>!t.status);
+            if(searchQuery.trim()) { const q=searchQuery.toLowerCase(); result=result.filter(t=>t.nama.toLowerCase().includes(q)); }
+            if(sortBy==='terbaru') result.sort((a,b)=>b.id-a.id);
+            if(sortBy==='terlama') result.sort((a,b)=>a.id-b.id);
+            if(sortBy==='nama-az') result.sort((a,b)=>a.nama.localeCompare(b.nama,'id'));
+            return result;
+        }
+        function getStats() { return { total: transfers.length, selesai: transfers.filter(t=>t.status).length, pending: transfers.filter(t=>!t.status).length }; }
+
+        // ──────────────────────────────────────
+        // EVENT HANDLERS LAINNYA
+        // ──────────────────────────────────────
+        window.handleFilter = (v) => { filterStatus=v; render(); };
+        window.handleSort = (v) => { sortBy=v; render(); };
+        window.switchTab = (t) => { activeAdminTab=t; render(); };
+        window.addData = () => {
+            const nama=document.getElementById('inNama')?.value?.trim();
+            const plat=document.getElementById('inPlat')?.value?.trim();
+            const tanggal=document.getElementById('inTanggal')?.value||new Date().toISOString().split('T')[0];
+            const catatan=document.getElementById('inCatatan')?.value?.trim();
+            const status=document.getElementById('inStatus')?.value==='true';
+            const bukti=document.getElementById('inBukti')?.value?.trim() || '';
+            if(!nama||!plat) return showToast('Nama dan platform wajib diisi.','warning');
+            transfers.push({id:Date.now(),nama,platform:plat,tanggal,catatan:catatan||'',status,bukti});
+            activeAdminTab='daftar'; render(); showToast(`Data "${nama}" ditambahkan!`,'success');
+        };
+        window.toggleStatus = (id) => {
+            const target=transfers.find(t=>t.id===id);
+            transfers=transfers.map(t=>t.id===id?{...t,status:!t.status}:t);
+            render(); if(target) showToast(`Status "${target.nama}" diubah.`, target.status ? 'info':'success');
+        };
+        window.openDeleteModal = (id) => { deleteTargetId=id; document.getElementById('deleteModal').classList.remove('hidden'); };
+        window.closeDeleteModal = () => { deleteTargetId=null; document.getElementById('deleteModal').classList.add('hidden'); };
+        document.getElementById('confirmDeleteBtn').addEventListener('click',()=>{
+            if(deleteTargetId!==null){
+                const target=transfers.find(t=>t.id===deleteTargetId);
+                transfers=transfers.filter(t=>t.id!==deleteTargetId);
+                closeDeleteModal(); render();
+                showToast(`"${target?.nama||'Data'}" dihapus.`,'error');
+            }
+        });
+        document.addEventListener('click',(e)=>{
+            if(e.target.id==='deleteModal') closeDeleteModal();
+            if(e.target.id==='editModal') closeEditModal();
+            if(e.target.id==='exportModal') closeExportModal();
+            if(e.target.id==='importModal') closeImportModal();
+            if(e.target.id==='loginPinModal') closeLoginModal();
+            if(e.target.id==='setupPinModal') document.getElementById('setupPinModal').classList.add('hidden');
+        });
+        window.openExportModal = () => document.getElementById('exportModal').classList.remove('hidden');
+        window.closeExportModal = () => document.getElementById('exportModal').classList.add('hidden');
+        window.openImportModal = () => document.getElementById('importModal').classList.remove('hidden');
+        window.closeImportModal = () => document.getElementById('importModal').classList.add('hidden');
+        window.backupData = () => {
+            const blob=new Blob([JSON.stringify(transfers,null,2)],{type:'application/json'});
+            const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`transferflow-backup-${new Date().toISOString().split('T')[0]}.json`; a.click();
+            showToast('Backup diunduh.','success');
+        };
+        window.processImportFile = () => {
+            const file=document.getElementById('importFile').files[0]; if(!file) return showToast('Pilih file.','warning');
+            const reader=new FileReader(); reader.onload=(e)=>{
+                const content=e.target.result;
+                try{
+                    if(file.name.endsWith('.json')){
+                        const parsed=JSON.parse(content); if(Array.isArray(parsed)) addBulkData(parsed); else showToast('Harus array JSON.','error');
+                    }else if(file.name.endsWith('.csv')){
+                        const lines=content.split('\n').filter(l=>l.trim()); if(lines.length<2) return showToast('CSV kosong.','warning');
+                        const headers=parseCSVLine(lines[0]).map(h=>h.toLowerCase());
+                        const namaIdx=headers.indexOf('nama'), platIdx=headers.indexOf('platform');
+                        if(namaIdx===-1||platIdx===-1) return showToast('CSV butuh kolom nama & platform.','error');
+                        const tanggalIdx=headers.indexOf('tanggal'), catatanIdx=headers.indexOf('catatan'), statusIdx=headers.indexOf('status'), buktiIdx=headers.indexOf('bukti');
+                        const newData=[];
+                        for(let i=1;i<lines.length;i++){
+                            const cols=parseCSVLine(lines[i]); if(cols.length<headers.length) continue;
+                            newData.push({
+                                id:Date.now()+i, nama:cols[namaIdx]||'Tanpa Nama', platform:cols[platIdx]||'Umum',
+                                tanggal:tanggalIdx!==-1?cols[tanggalIdx]:new Date().toISOString().split('T')[0],
+                                catatan:catatanIdx!==-1?cols[catatanIdx]:'',
+                                status:statusIdx!==-1?(cols[statusIdx].toLowerCase()==='true'):false,
+                                bukti:buktiIdx!==-1?cols[buktiIdx]:''
+                            });
+                        }
+                        addBulkData(newData);
+                    }
+                }catch(err){showToast('Format file tidak valid.','error');}
+                document.getElementById('importFile').value='';
+            };
+            reader.readAsText(file);
+        };
+        window.processImportText = () => {
+            const text=document.getElementById('importJsonText').value.trim(); if(!text) return showToast('Tempel JSON.','warning');
+            try{ const parsed=JSON.parse(text); if(Array.isArray(parsed)){ addBulkData(parsed); document.getElementById('importJsonText').value=''; } else showToast('Harus array JSON.','error'); }
+            catch(e){showToast('JSON tidak valid.','error');}
+        };
+        function addBulkData(dataArray){
+            let added=0;
+            dataArray.forEach(item=>{
+                if(item.nama&&item.platform){
+                    transfers.push({
+                        id:Date.now()+Math.random(),
+                        nama:String(item.nama),
+                        platform:String(item.platform),
+                        tanggal:item.tanggal||new Date().toISOString().split('T')[0],
+                        catatan:item.catatan||'',
+                        status:item.status===true||item.status==='true',
+                        bukti:item.bukti||''
+                    });
+                    added++;
+                }
+            });
+            if(added>0){ activeAdminTab='daftar'; render(); showToast(`Berhasil menambahkan ${added} data!`,'success'); } else showToast('Tidak ada data valid.','warning');
+        }
+        function parseCSVLine(line){
+            const result=[]; let current='', inQuotes=false;
+            for(let i=0;i<line.length;i++){ const char=line[i]; if(inQuotes){ if(char==='"'){ if(i+1<line.length&&line[i+1]==='"'){ current+='"'; i++; } else inQuotes=false; } else current+=char; } else { if(char==='"') inQuotes=true; else if(char===','){ result.push(current.trim()); current=''; } else current+=char; } }
+            result.push(current.trim()); return result.map(f=>f.replace(/^"|"$/g,'').trim());
+        }
+        window.exportData = (format) => {
+            if(transfers.length===0) return showToast('Tidak ada data.','warning');
+            const now=new Date().toISOString().split('T')[0]; let content,filename,mimeType;
+            if(format==='json'){ content=JSON.stringify(transfers,null,2); filename=`transferflow-data-${now}.json`; mimeType='application/json'; }
+            else{
+                const headers=['ID','Nama','Platform','Tanggal','Catatan','Status','Bukti'];
+                const rows=transfers.map(t=>[t.id,t.nama,t.platform,t.tanggal,t.catatan||'',t.status?'Selesai':'Pending',t.bukti||'']);
+                const csvContent=[headers,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+                content='\uFEFF'+csvContent; filename=`transferflow-data-${now}.csv`; mimeType='text/csv;charset=utf-8';
+            }
+            const blob=new Blob([content],{type:mimeType}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+            closeExportModal(); showToast(`Data diekspor (${format.toUpperCase()}).`,'success');
+        };
+        document.addEventListener('keydown',(e)=>{ if(e.key==='Escape'){ closeAllModals(); } });
+
+        // Initial load
+        checkAccess();
+    </script>
+</body>
+</html>
